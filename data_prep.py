@@ -1,5 +1,6 @@
 import PIL
 from PIL import Image
+import numpy as np
 import  os,shutil
 
 import os
@@ -77,14 +78,14 @@ def resize_n_back(path,save_path = '',size = (256,256),scale = 1,names =[]):
                 ran = (p*bs+1,(p+1)*bs)
             pics = [Image.open(path + '/' + n) for n in names[ran[0]:ran[1]+1]]
             for j in range(len(pics)):
-                if j <= bs/3:
-                    scale_size = (int(size[0] / scale), int(size[1] / scale))
-                elif j > bs/3 and j <= bs*2/3:
-                    scale_size = (int(size[0] / (scale * 2)), int(size[1] / (scale * 2)))
-                else:
-                    scale_size = (int(size[0] / (scale * 1.5)), int(size[1] / (scale * 1.5)))
-                pics[j] = pics[j].resize(scale_size,PIL.Image.BILINEAR)
-                pics[j] = pics[j].resize(size,Image.NEAREST)
+                #if j <= bs/3:
+                scale_size = (int(size[0] / scale), int(size[1] / scale))
+                #elif j > bs/3 and j <= bs*2/3:
+                #    scale_size = (int(size[0] / (scale * 2)), int(size[1] / (scale * 2)))
+                #else:
+                #    scale_size = (int(size[0] / (scale * 1.5)), int(size[1] / (scale * 1.5)))
+                pics[j] = pics[j].resize(scale_size,Image.BILINEAR)
+                pics[j] = pics[j].resize(size,Image.BILINEAR)
                 pics[j].save(save_path + '/' + names[n], "JPEG")
                 n+=1
     else:
@@ -98,24 +99,24 @@ def resize_n_back(path,save_path = '',size = (256,256),scale = 1,names =[]):
 def prepate_ims(foldername ,path, base_size = (256, 256), scale = 1,trans=(False,False,False,False)):
     #save base sized pics
     s_path1 ='base ' + foldername + ' ' + str(base_size[0]) +'x'+ str(base_size[1])
-    s_path2 = 'downscaled ' + foldername + ' ' + str(int(base_size[0]/scale)) +'x'+ str(int(base_size[1]/scale)) + 'and'  + str(int(base_size[0]/(scale*2))) +'x'+ str(int(base_size[1]/(scale*2)))
+    s_path2 = 'downscaled ' + foldername + ' ' + str(int(base_size[0]/scale)) +'x'+ str(int(base_size[1]/scale))
     if not os.path.exists(s_path1):
         os.makedirs(s_path1)
     res_n_save(path, base_size, save_path=s_path1, transforms=trans)
     #save scaled pics
     if not os.path.exists(s_path2):
         os.makedirs(s_path2)
-    resize_n_back(s_path1, s_path2, scale=2)
+    resize_n_back(s_path1, s_path2,size=base_size, scale=2)
 
 
-def missing_files(full_list_path,created_list_path):
+def missing_files(full_list_path,created_list_path,size):
     names1 = get_files_list(full_list_path)
     names2 = get_files_list(created_list_path)
     set1 = set(names1)
     set2 = set(names2)
     set1 = set1.difference(set2)
     if not len(set1) == 0:
-        resize_n_back(full_list_path,created_list_path,scale=2,names=list(set1))
+        resize_n_back(full_list_path,created_list_path,scale=2,names=list(set1),size= size)
         return True
     else:
         return False
@@ -196,7 +197,55 @@ def check_ims(path):
         if(is_grey_scale(p)):
             print(p)
 
+def gs(path):
+    img = Image.open(path).convert("RGB")
+    arr = np.array(img)
+    sizelist.append([arr.shape,path])
+    if( len(arr.shape) == 3 and arr.shape[2]==3):
+        return False
+    elif(arr.shape[0]==int(basesize[0]/scale)):
+        return True
+    else:
+        return False
+
+def Check_ims(path):
+    names = get_files_paths(path)
+    for p in names:
+        if(gs(p)):
+            print(p)
+
+
+
+
+foldername = "satellite"
+basesize = (256,256)
+scale = 2
+
+sizelist = []
+
+def downsize_folder(path,save_path,size):
+    paths = get_files_paths(path)
+    names = get_files_list(path)
+    for i in range(len(paths)):
+        im = Image.open(paths[i])
+        im = im.resize(size)
+        im.save(save_path+'\\'+names[i])
+
+
 if __name__ == '__main__':
-    #prepate_ims(foldername='Dataset',path='Dataset',scale=2,trans=(True,True,True,False))
-    #missing_files('base Dataset 256x256','downscaled Dataset 128x128and64x64')
-    split_files(path='base Dataset 256x256',path2='downscaled Dataset 128x128and64x64')
+    #downsize_folder('base satellite 256x256_valid','down satellite 128x128_valid',(128,128))
+    downsize_folder('base satellite 256x256_train','down satellite 128x128_train',(128,128))
+
+    #prepate_ims(foldername=foldername,path=foldername,base_size=basesize,scale=2,trans=(True,True,True,False))
+    #missing_files('base '+foldername+' ' + str(basesize[0]) +'x'+ str(basesize[1]),'downscaled '+foldername+' '+str(int(basesize[0]/scale)) +'x'+ str(int(basesize[1]/scale)),size=basesize)
+    #split_files(path='base '+foldername+' ' + str(basesize[0]) +'x'+ str(basesize[1]),path2='downscaled '+foldername+' '+str(int(basesize[0]/scale)) +'x'+ str(int(basesize[1]/scale)))
+    #Check_ims('base '+ foldername + ' '+ str(basesize[0])+'x'+str(basesize[1]))
+    #Check_ims('downscaled '+ foldername + ' ' + str(int(basesize[0]/scale))+'x'+str(int(basesize[1]/2)))
+    #Check_ims('base '+foldername+' ' + str(basesize[0]) +'x'+ str(basesize[1])+'_train')
+    #Check_ims('downscaled '+foldername+' '+str(int(basesize[0]/scale)) +'x'+ str(int(basesize[1]/scale))+'_train')
+    #Check_ims('base ' + foldername + ' ' + str(basesize[0]) + 'x' + str(basesize[1]) + '_valid')
+    #Check_ims('downscaled '+foldername+' '+str(int(basesize[0]/scale)) +'x'+ str(int(basesize[1]/scale))+'_valid')
+    for i in sizelist:
+       if(i[0][2] != 3):
+           print(i[1])
+           print(i[0][2])
