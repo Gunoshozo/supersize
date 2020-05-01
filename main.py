@@ -11,12 +11,13 @@ from PIL import Image
 import numpy as np
 import keras.backend as K
 from keras import layers
-from keras.layers import Input, Add,  BatchNormalization,  Conv2D, ReLU,Dense,Flatten
-from keras.models import Model, model_from_json,Sequential
-from keras.optimizers import Adam,SGD
+from keras.layers import Input, Add,  BatchNormalization,  Conv2D, ReLU, Dense, Flatten
+from keras.models import Model, model_from_json, Sequential
+from keras.optimizers import Adam
 from keras.losses import mean_squared_error
 from keras.callbacks import History
 import matplotlib.pyplot as plt
+from ESRGAN.metrics import imageLoader
 
 
 
@@ -47,107 +48,14 @@ def SuperSizer(input_shape = (256,256,3), conv_l= Conv_num):
     model = Model(inputs= X_input,outputs =y, name = 'SupSizer')
     return model
 
-def SuperSizer228(input_shape = (512,512,3), conv_l= Conv_num):
-    X_input = Input(input_shape)
-
-    shortcut = X_input
-
-    y = Conv2D(64,(3,3),padding='same')(X_input)
-    y = BatchNormalization()(y)
-    y = ReLU()(y)
-
-
-    y = Dense(64,activation='relu',use_bias=True)(y)
-    y = Dense(64, activation='relu',use_bias=True)(y)
-
-
-    y = Conv2D(128, (3, 3), padding='same')(y)
-    y = BatchNormalization()(y)
-    y = ReLU()(y)
-
-    y = Dense(128, activation='relu', use_bias=True)(y)
-    y = Dense(128, activation='relu', use_bias=True)(y)
-
-    y = Conv2D(3, (3, 3), padding='same')(y)
-    y = layers.Add()([shortcut,y])
-    model = Model(inputs= X_input,outputs =y, name = 'SupSizer')
-    return model
-
-def SuperSizerU(input_shape = (512,512,3), conv_l= Conv_num):
-    X_input = Input(input_shape)
-
-    shortcut = X_input
-
-    y = Conv2D(32,(3,3),padding='same')(X_input)
-    y = ReLU()(y)
-
-    shortcut32 = y
-
-
-    y = Conv2D(32, (3, 3), padding='same')(y)
-    y = Add()([shortcut32,y])
-    y = ReLU()(y)
-
-    y = Conv2D(64, (3, 3), padding='same')(y)
-    y = BatchNormalization()(y)
-    y = ReLU()(y)
-    shortcut64 = y
-
-
-    y = Conv2D(64, (3, 3), padding='same')(y)
-    y = Add()([shortcut64,y])
-    y = ReLU()(y)
-
-    y = Conv2D(128, (3, 3), padding='same')(y)
-    y = BatchNormalization()(y)
-    y = ReLU()(y)
-    shortcut128 = y
-
-    y = Conv2D(128, (3, 3), padding='same')(y)
-    y = Add()([shortcut128,y])
-    y = ReLU()(y)
-
-    y = Conv2D(3, (3, 3), padding='same')(y)
-    y = Add()([shortcut,y])
-    model = Model(inputs= X_input,outputs =y, name = 'SupSizer')
-    return model
-
 
 dirname = ' satellite '
-train_path_X = 'downscaled'+dirname+'128x128_train'
-train_path_Y = 'base'+dirname+'256x256_train'
-valid_path_X = 'downscaled'+dirname+'128x128_valid'
-valid_path_Y = 'base'+dirname+'256x256_valid'
-
-def imageLoader(pathX, pathY, batch_size):
+train_path_X = 'x'+dirname+'128x128_train'
+train_path_Y = 'y'+dirname+'256x256_train'
+valid_path_X = 'x'+dirname+'128x128_valid'
+valid_path_Y = 'y'+dirname+'256x256_valid'
 
 
-    file_list_X = get_files_paths(pathX)
-    file_list_Y = get_files_paths(pathY)
-
-
-    L = len(file_list_X)
-    assert (len(file_list_X) == len(file_list_Y))
-    #this line is just to make the generator infinite, keras needs that
-    while True:
-
-        batch_start = 0
-        batch_end = batch_size
-
-        while batch_start < L:
-            limit = min(batch_end, L)
-            X1 =[np.array(Image.open(f).convert('RGB')) for f in file_list_X[batch_start:batch_end]]
-            X = np.array(X1)
-            Y1 =[np.array(Image.open(f).convert('RGB')) for f in file_list_Y[batch_start:batch_end]]
-            Y = np.array(Y1)
-
-            X = np.true_divide(X,255)
-            Y = np.true_divide(Y,255)
-
-            yield (X,Y) #a tuple with two numpy arrays with batch_size samples
-
-            batch_start = clamp(L,batch_start+batch_size)
-            batch_end = clamp(L,batch_end+batch_size)
 
 def rmse(y_true,y_pred):
     return K.sqrt(K.mean(K.square(y_pred-y_true),axis=-1))
@@ -155,25 +63,27 @@ def rmse(y_true,y_pred):
 def nrmse(y_true,y_pred):
     return -rmse(y_true,y_pred)
 
-def clamp(max,val):
-    if val > max:
-        return max
-    else:
-        return val
+
 
 def PSNR(y_true,y_pred):
     return tf.image.psnr(y_true,y_pred,1.0)
 
-def assemble_and_train(shape,n = Conv_num,lr_=0.001,ep=1,batch_size = 20):
+def ssim(y_true,y_pred):
+    return tf.image.ssim(y_true,y_pred,max_val=1.0)
 
+def assemble_and_train(shape,n = Conv_num,lr_=0.001,ep=1,batch_size = 20):
     train_samples = len(get_files_list(train_path_X))
     valid_samples = len(get_files_list(valid_path_X))
     ss_model = SuperSizer228(input_shape=shape, conv_l = n)
     opt = Adam(lr=lr_,clipvalue=0.001)
-    ss_model.compile(opt, loss='mean_squared_error',metrics=[PSNR,rmse,'mae'])
+    ss_model.compile(opt, loss='mean_squared_error',metrics=[PSNR,rmse,'mae',ssim])
     ss_model.summary()
     print("Assembled, now training")
-    ss_model.fit_generator(generator=imageLoader(train_path_X,train_path_Y,batch_size), validation_data=imageLoader(valid_path_X,valid_path_Y,batch_size), steps_per_epoch=int(train_samples/batch_size), validation_steps=int(valid_samples/batch_size), epochs=ep, callbacks=[hist])
+    ss_model.fit_generator(generator=imageLoader(train_path_X,train_path_Y,batch_size),
+                           validation_data=imageLoader(valid_path_X,valid_path_Y,batch_size),
+                           steps_per_epoch=int(train_samples/batch_size),
+                           validation_steps=int(valid_samples/batch_size),
+                           epochs=ep, callbacks=[hist])
 
     model_json = ss_model.to_json()
     with open(str(n)+"model.json", "w") as json_file:
@@ -187,7 +97,6 @@ def get_image(path,scale = 1.):
     return np.array(X)
 
 def predict(path,version,n):
-
     files = get_files_paths(path)
     names = get_files_list(path)
     Ims = [Image.open(n) for n in files]
@@ -263,7 +172,7 @@ def plot_loss():
 def main():
     #Upscale(path='test\\Downscaled',save_path='test\\NN',sf=2,ver=1)
     #assemble_and_train(shape=Shape,lr_=0.1,ep=2,batch_size=8)
-    train(ep=10, n_of_run=1, lr_=0.1,a=50,batch_size=8)
+    #train(ep=10, n_of_run=1, lr_=0.1,a=50,batch_size=8)
 
     #train(ep=10, n_of_run=2, lr_=0.01,a=50,batch_size=8)
     #train(ep=10, n_of_run=3, lr_=0.001,a=50,batch_size=8)

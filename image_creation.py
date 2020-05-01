@@ -42,8 +42,8 @@ def delete_files(deleteprs=.0,path=''):
         paths.remove(paths[index])
 
 def main():
-    prepate_ims('testims','test',(512,512),2)
-    #missing_files('base testims 256x256','downscaled testims 128x128and64x64')
+    #prepate_ims('testims','test',(512,512),2)
+    missing_files('base testims 256x256','downscaled testims 128x128)
     #split_files('base testims 256x256','downscaled testims 128x128and64x64')
     #seq = generate_strings(length=3,lownup=False)
     #seq.remove('aux')
