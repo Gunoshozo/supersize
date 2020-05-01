@@ -14,12 +14,16 @@ from data_prep import get_files_list
 
 class upscale_model():
 
-    def __init__(self, low_size, sf, blocks, filters,save, lr,weight_location,verbose=False):
+    def __init__(self, low_size, sf, blocks, filters,save, lr,weight_location,verbose=False,increasing=False):
         self.low_size = low_size
         self.size = int(low_size * sf)
         self.blocks = blocks
         self.weight_location = weight_location
-        self.model = self.ups_model(blocks=blocks, filters=filters, input_shape=(self.low_size, self.low_size, 3),
+        if increasing:
+            self.model = self.increasing_model(blocks=blocks, filters=filters, input_shape=(self.low_size, self.low_size, 3),
+                                    _size=(self.size, self.size, 3))
+        else:
+            self.model = self.ups_model(blocks=blocks, filters=filters, input_shape=(self.low_size, self.low_size, 3),
                                     _size=(self.size, self.size, 3))
         self.assemble_model(lr=lr, blocks=blocks, verbose=verbose,save=save)
         self.history = History()
@@ -78,6 +82,22 @@ class upscale_model():
         model = Model(inputs=x_input, outputs=x, name='ESRGAN?')
         return model
 
+    def increasing_model(self, blocks=3, filters=32, input_shape=(128,128,3), _size=(256,256,3), kernel=3, beta=0.2):
+        x_input = Input(input_shape)
+        x = Conv2D(filters=filters, kernel_size=(kernel, kernel), padding="same")(x_input)
+        x_shortcut = x
+        for i in range(blocks):
+            filter = filters*(i+1)
+            x = self.block(x, kernel, filter, beta)
+        x = Conv2D(filters=filters, kernel_size=(kernel, kernel), padding="same")(x)
+        x = Add()([x, x_shortcut])
+
+        x = Conv2DTranspose(filters=filters, kernel_size=(2, 2), strides=2, padding='valid')(x)
+        x = Conv2D(filters=kernel, kernel_size=(kernel, kernel), padding="same")(x)
+        x = Conv2D(filters=3, kernel_size=(kernel, kernel), padding="same")(x)
+        model = Model(inputs=x_input, outputs=x, name='ESRGAN?')
+        return model
+
     def assemble_model(self, lr, blocks, save, verbose=True,loss='mean_squared_error'):
         opt = Adam(lr=lr,clipvalue=0.5)
         self.model.compile(opt, loss=loss, metrics=[PSNR, ssim, rmse, 'mae'])
@@ -86,6 +106,7 @@ class upscale_model():
             plot_model(self.model, to_file="model" + str(self.blocks) + ".png")
         if save:
             self.model.save(self.weight_location +str(self.blocks) + ' model ' +'0.h5')
+
 
 
     def insert_layer_before_upscale(self, kernel, filters, startnumber,number, beta=0.2):
